@@ -303,9 +303,15 @@ class LoginWindow(QWidget):
                 result = response.json()
                 
                 # 检查是否需要验证码
-                if result.get('code') == 410 and "need_vcode" in result.get('message', ''):
+                if result.get('code') == 410 and "需要验证码" in result.get('message', ''):
                     if self.show_vcode_dialog():
                         self.handle_login()
+                    return
+                
+                if result.get('code') == 410 and "验证码错误" in result.get('message', ''):
+                    QMessageBox.warning(self, "错误", "验证码错误！")
+                    self.vcode = ""
+                    self.handle_login()
                     return
                 
                 if result.get('code') == 200:  # 登录成功
