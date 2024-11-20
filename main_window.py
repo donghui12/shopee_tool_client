@@ -14,9 +14,10 @@ from PyQt6.QtCore import Qt
 import requests
 
 class MainWindow(QMainWindow):
-    def __init__(self, username):
+    def __init__(self, username, remaining_time):
         super().__init__()
         self.username = username
+        self.remaining_time = remaining_time
         self.api_base_url = "http://localhost:8080/v1/shopee"
         self.setup_ui()
         
@@ -48,7 +49,9 @@ class MainWindow(QMainWindow):
         """)
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        # 添加用户信息
+        # 添加用户信息和剩余时间
+        info_layout = QHBoxLayout()
+        
         user_info = QLabel(f"当前用户: {self.username}")
         user_info.setStyleSheet("""
             QLabel {
@@ -57,6 +60,20 @@ class MainWindow(QMainWindow):
                 padding: 5px;
             }
         """)
+        
+        remaining_info = QLabel(f"剩余时间: {self.remaining_time}天")
+        remaining_info.setStyleSheet("""
+            QLabel {
+                font-size: 16px;
+                color: #e67e22;  /* 橙色显示剩余时间 */
+                font-weight: bold;
+                padding: 5px;
+            }
+        """)
+        
+        info_layout.addWidget(user_info)
+        info_layout.addStretch()
+        info_layout.addWidget(remaining_info)
         
         # 创建功能区域
         function_frame = QFrame()
@@ -171,7 +188,7 @@ class MainWindow(QMainWindow):
         
         # 添加所有组件到主布局
         main_layout.addWidget(title_label)
-        main_layout.addWidget(user_info)
+        main_layout.addLayout(info_layout)  # 添加信息布局
         main_layout.addWidget(function_frame)
         function_layout.addWidget(time_group)
         main_layout.addStretch()
@@ -217,7 +234,24 @@ class MainWindow(QMainWindow):
             self.status_label.setText("出货时间必须在 1-365 天之间！")
             self.status_label.setStyleSheet("color: #e74c3c;")
             return
-            
+        
+        # 验证是否超过剩余时间
+        try:
+            remaining_days = int(self.remaining_time)
+            if days > remaining_days:
+                QMessageBox.warning(
+                    self,
+                    "输入错误",
+                    f"出货时间不能超过剩余时间（{remaining_days}天）！",
+                    QMessageBox.StandardButton.Ok
+                )
+                self.status_label.setText(f"出货时间不能超过剩余时间（{remaining_days}天）！")
+                self.status_label.setStyleSheet("color: #e74c3c;")
+                return
+        except ValueError:
+            # 如果剩余时间转换失败，继续执行但记录错误
+            print(f"剩余时间转换错误: {self.remaining_time}")
+        
         try:
             response = requests.post(
                 f"{self.api_base_url}/update_order",

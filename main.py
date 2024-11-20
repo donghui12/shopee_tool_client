@@ -13,8 +13,8 @@ class ShopeeTools:
         self.login_window = LoginWindow(self)
         self.login_window.show()
         
-    def show_main_window(self, username):
-        self.main_window = MainWindow(username)
+    def show_main_window(self, username, remaining_time=None):
+        self.main_window = MainWindow(username, remaining_time)
         self.main_window.show()
         if self.login_window:
             self.login_window.close()

@@ -322,11 +322,10 @@ class LoginWindow(QWidget):
                         return
                     
                     # 验证激活码
-                    if not self.verify_and_bind_active_code(username):
+                    success, remaining_time = self.verify_and_bind_active_code(username)
+                    if not success:
                         return
-                    
-                    QMessageBox.information(self, "成功", "登录成功！")
-                    self.shopee_tools.show_main_window(username)
+                    self.shopee_tools.show_main_window(username, remaining_time)
                 else:
                     error_msg = result.get('message', '登录失败！')
                     QMessageBox.warning(self, "错误", error_msg)
@@ -350,12 +349,18 @@ class LoginWindow(QWidget):
                 print("激活码验证响应:", active_response.text)
                 
                 if active_response.status_code == 200:
-                    return True  # 激活码验证成功
+                    result = active_response.json()
+                    if result.get('code') == 200:
+                        # 获取剩余时间
+                        remaining_time = result.get('data', '')
+                        print(f"剩余时间: {remaining_time}")
+                        # 传递剩余时间到主窗口
+                        return True, remaining_time
                     
                 # 显示激活码输入对话框
                 active_dialog = ActiveCodeDialog(self)
                 if active_dialog.exec() != 1:  # 用户点击取消
-                    return False
+                    return False, None
                     
                 active_code = active_dialog.get_active_code()
                 verify_active_code_response = requests.get(
@@ -382,10 +387,10 @@ class LoginWindow(QWidget):
                 print("绑定激活码响应:", bind_response.text)
                 
                 if bind_response.status_code == 200:
-                    return True
+                    return True, 0
                 else:
                     QMessageBox.warning(
-                        self, 
+                        self,
                         "错误", 
                         f"激活码绑定失败（{bind_response.status_code}），请重新输入！"
                     )
@@ -401,7 +406,7 @@ class LoginWindow(QWidget):
                 )
                 if retry == QMessageBox.StandardButton.Yes:
                     continue  # 继续循环，重试
-                return False  # 用户选择不重试
+                return False, None  # 用户选择不重试
 
     def mousePressEvent(self, event):
         """实现窗口拖动"""
