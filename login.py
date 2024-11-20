@@ -1,5 +1,15 @@
-from PyQt6.QtWidgets import (QWidget, QLabel, QLineEdit, QPushButton, 
-                           QVBoxLayout, QHBoxLayout, QMessageBox, QFrame)
+from PyQt6.QtWidgets import (
+    QWidget, 
+    QLabel, 
+    QLineEdit, 
+    QPushButton, 
+    QVBoxLayout, 
+    QHBoxLayout, 
+    QMessageBox, 
+    QFrame,
+    QDialog
+)
+from vcode_dialog import VCodeDialog
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QPixmap, QFont
 import requests
@@ -8,53 +18,154 @@ import uuid
 import platform
 import subprocess
 import os
+import hashlib
 
-class LoginWindow(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.api_base_url = "http://IP:8080/v1/shopee"
-        self.username = ""
-        self.machine_code = self.get_machine_code()
+# 激活码对话框类
+class ActiveCodeDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
         self.setup_ui()
         
+    def setup_ui(self):
+        self.setWindowTitle("激活码验证")
+        self.setFixedSize(300, 150)
+        
+        layout = QVBoxLayout()
+        
+        label = QLabel("请输入激活码:")
+        label.setStyleSheet("font-size: 14px; margin-bottom: 10px;")
+        
+        self.active_code_input = QLineEdit()
+        self.active_code_input.setPlaceholderText("请输入激活码")
+        self.active_code_input.setMinimumHeight(35)
+        self.active_code_input.setStyleSheet("""
+            QLineEdit {
+                border: 1px solid #CCCCCC;
+                border-radius: 5px;
+                padding: 5px 10px;
+                font-size: 14px;
+            }
+        """)
+        
+        button_layout = QHBoxLayout()
+        
+        confirm_button = QPushButton("确定")
+        confirm_button.setMinimumHeight(35)
+        confirm_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                font-size: 14px;
+                min-width: 80px;
+            }
+        """)
+        confirm_button.clicked.connect(self.accept)
+        
+        cancel_button = QPushButton("取消")
+        cancel_button.setMinimumHeight(35)
+        cancel_button.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                font-size: 14px;
+                min-width: 80px;
+            }
+        """)
+        cancel_button.clicked.connect(self.reject)
+        
+        button_layout.addWidget(confirm_button)
+        button_layout.addWidget(cancel_button)
+        
+        layout.addWidget(label)
+        layout.addWidget(self.active_code_input)
+        layout.addLayout(button_layout)
+        
+        self.setLayout(layout)
+        
+    def get_active_code(self):
+        return self.active_code_input.text()
+
+# 登录窗口类
+class LoginWindow(QWidget):
+    def __init__(self, shopee_tools):
+        super().__init__()
+        self.shopee_tools = shopee_tools
+        self.api_base_url = "http://localhost:8080/v1/shopee"
+        self.username = ""
+        self.machine_code = self.get_machine_code()
+        self.vcode = ""
+        self.setup_ui()
+
     def get_machine_code(self):
         """获取机器唯一标识码"""
         try:
-            # 获取主板序列号
+            # 获取主板序列号或其他硬件信息
             if platform.system() == "Windows":
                 command = "wmic baseboard get serialnumber"
                 result = subprocess.check_output(command, shell=True).decode()
-                motherboard_serial = result.split('\n')[1].strip()
-            else:  # Linux/Mac
-                command = "system_profiler SPHardwareDataType | grep 'Serial Number'"
-                result = subprocess.check_output(command, shell=True).decode()
-                motherboard_serial = result.split(':')[1].strip()
-        except:
-            motherboard_serial = ""
+                serial = result.split('\n')[1].strip()
+            else:  # macOS/Linux
+                if platform.system() == "Darwin":  # macOS
+                    command = "system_profiler SPHardwareDataType | grep 'Hardware UUID'"
+                    result = subprocess.check_output(command, shell=True).decode()
+                    serial = result.split(': ')[1].strip()
+                else:  # Linux
+                    try:
+                        with open('/sys/class/dmi/id/board_serial') as f:
+                            serial = f.read().strip()
+                    except:
+                        serial = str(uuid.uuid4())
+            
+            return hashlib.md5(serial.encode()).hexdigest()
+            
+        except Exception as e:
+            print(f"获取机器码失败: {str(e)}")
+            return hashlib.md5(str(uuid.uuid4()).encode()).hexdigest()
 
-        # 获取CPU信息
+    def verify_machine_code(self):
+        """验证机器码"""
+        print(f"机器码: {self.machine_code}, 用户名: {self.username}")
         try:
-            if platform.system() == "Windows":
-                command = "wmic cpu get processorid"
-                result = subprocess.check_output(command, shell=True).decode()
-                processor_id = result.split('\n')[1].strip()
-            else:  # Linux/Mac
-                command = "sysctl -n machdep.cpu.brand_string"
-                result = subprocess.check_output(command, shell=True).decode()
-                processor_id = result.strip()
-        except:
-            processor_id = ""
+            # 检查机器码是否已经绑定
+            check_response = requests.get(
+                f"{self.api_base_url}/mechine_code",
+                params={
+                    "machine_code": self.machine_code,
+                    "username": self.username,
+                },
+                timeout=5
+            )
+            
+            if check_response.status_code == 200:
+                return True
+                
+            # 如果未绑定，尝试绑定机器码
+            bind_response = requests.post(
+                f"{self.api_base_url}/mechine_code",
+                json={
+                    "machine_code": self.machine_code,
+                    "username": self.username
+                },
+                headers={'Content-Type': 'application/json'},
+                timeout=5
+            )
+            
+            return bind_response.status_code == 200
+            
+        except requests.exceptions.RequestException as e:
+            print(f"验证机器码失败: {str(e)}")
+            return False
 
-        # 组合信息生成唯一标识
-        machine_id = f"{motherboard_serial}_{processor_id}_{str(uuid.getnode())}"
-        return uuid.uuid5(uuid.NAMESPACE_DNS, machine_id).hex
-        
     def setup_ui(self):
-        # 设置窗口基本属性
+        """设置UI界面"""
         self.setWindowTitle('ShopeeTools - 登录')
-        self.setFixedSize(400, 500)  # 固定窗口大小
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)  # 无边框窗口
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)  # 透明背景
+        self.setFixedSize(400, 500)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
         # 创建主布局
         main_layout = QVBoxLayout()
@@ -73,28 +184,25 @@ class LoginWindow(QWidget):
         
         # 登录框布局
         login_layout = QVBoxLayout()
-        login_layout.setSpacing(15)
-        login_layout.setContentsMargins(40, 30, 40, 40)
+        login_layout.setContentsMargins(40, 40, 40, 40)
         
         # Logo
         logo_label = QLabel()
         logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # 这里需要替换为你的实际logo路径
-        # logo_pixmap = QPixmap("path/to/your/logo.png")
-        # logo_label.setPixmap(logo_pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio))
-        logo_label.setText("ShopeeTools")  # 临时使用文字代替logo
-        logo_label.setFont(QFont("Arial", 24, QFont.Weight.Bold))
+        # 如果有logo图片，取消下面这行的注释并设置正确的路径
+        # logo_label.setPixmap(QPixmap("path/to/logo.png").scaled(120, 120, Qt.AspectRatioMode.KeepAspectRatio))
         
         # 用户名输入框
         self.username_input = QLineEdit()
         self.username_input.setPlaceholderText("用户名")
-        self.username_input.setMinimumHeight(40)
+        self.username_input.setMinimumHeight(45)
         self.username_input.setStyleSheet("""
             QLineEdit {
                 border: 1px solid #CCCCCC;
                 border-radius: 5px;
                 padding: 5px 10px;
                 font-size: 14px;
+                margin-bottom: 10px;
             }
             QLineEdit:focus {
                 border: 1px solid #4CAF50;
@@ -105,11 +213,22 @@ class LoginWindow(QWidget):
         self.password_input = QLineEdit()
         self.password_input.setPlaceholderText("密码")
         self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password_input.setMinimumHeight(40)
-        self.password_input.setStyleSheet(self.username_input.styleSheet())
+        self.password_input.setMinimumHeight(45)
+        self.password_input.setStyleSheet("""
+            QLineEdit {
+                border: 1px solid #CCCCCC;
+                border-radius: 5px;
+                padding: 5px 10px;
+                font-size: 14px;
+                margin-bottom: 20px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #4CAF50;
+            }
+        """)
         
         # 登录按钮
-        self.login_button = QPushButton("登 录")
+        self.login_button = QPushButton("登录")
         self.login_button.setMinimumHeight(45)
         self.login_button.setStyleSheet("""
             QPushButton {
@@ -147,41 +266,17 @@ class LoginWindow(QWidget):
         
         # 设置主布局
         self.setLayout(main_layout)
-
-    def verify_machine_code(self):
-        """验证或注册机器码"""
-        try:
-            response = requests.get(
-                f"{self.api_base_url}/mechine_code",
-                params={"machine_code": self.machine_code},
-                timeout=5
-            )
-            
-            if response.status_code != 200:
-                # 如果获取失败，尝试注册新机器码
-                register_data = {
-                    "username": self.username,
-                    "mechine_code": self.machine_code
-                }
-                
-                response = requests.post(
-                    f"{self.api_base_url}/mechine_code",
-                    json=register_data,
-                    headers={'Content-Type': 'application/json'},
-                    timeout=5
-                )
-                
-                if response.status_code != 200:
-                    QMessageBox.critical(self, "错误", "机器码注册失败！")
-                    return False
-                    
+    
+    def show_vcode_dialog(self):
+        """显示验证码输入对话框"""
+        dialog = VCodeDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:  # 用户点击确定
+            self.vcode = dialog.get_vcode()
             return True
-            
-        except requests.exceptions.RequestException as e:
-            QMessageBox.critical(self, "错误", f"机器码验证失败: {str(e)}")
-            return False
+        return False
 
     def handle_login(self):
+        """处理登录"""
         username = self.username_input.text()
         password = self.password_input.text()
         
@@ -189,6 +284,9 @@ class LoginWindow(QWidget):
             "username": username,
             "password": password
         }
+        
+        if self.vcode:
+            login_data["vcode"] = self.vcode
         
         try:
             response = requests.post(
@@ -198,16 +296,78 @@ class LoginWindow(QWidget):
                 timeout=5
             )
             
+            print("状态码:", response.status_code)
+            print("响应内容:", response.text)
+
             if response.status_code == 200:
+                print(f"result: {response.json()}")
                 result = response.json()
-                if result.get('success', False):
-                    self.username = username  # 保存用户名
-                    # 登录成功后验证机器码
-                    if self.verify_machine_code():
+                
+                # 检查是否需要验证码
+                if result.get('code') == 410 and "need_vcode" in result.get('message', ''):
+                    if self.show_vcode_dialog():  # 显示验证码输入对话框
+                        self.handle_login()  # 重新尝试登录
+                    return
+
+                print(f"result: {result}")
+                if result.get('code') == 200:  # 登录成功
+                    print(f"登录成功: {username}")
+                    self.username = username
+                    # 验证机器码
+                    if not self.verify_machine_code():
+                        QMessageBox.warning(self, "警告", "机器码验证失败！")
+                        return
+                    # 验证激活码
+                    try:
+                        active_response = requests.get(
+                            f"{self.api_base_url}/active_code",
+                            params={"username": username},
+                            timeout=5
+                        )
+                        
+                        print("激活码验证响应:", active_response.text)
+                        
+                        if active_response.status_code != 200:
+                            # 显示激活码输入对话框
+                            active_dialog = ActiveCodeDialog(self)
+                            if active_dialog.exec() == 1:  # 用户点击确定
+                                active_code = active_dialog.get_active_code()
+                                # 验证激活码
+                                verify_active_code_response = requests.get(
+                                    f"{self.api_base_url}/verify_active_code",
+                                    params={"active_code": active_code},
+                                    timeout=5
+                                )
+
+                                if verify_active_code_response.status_code != 200:
+                                    QMessageBox.warning(self, "错误", "无效激活码！")
+                                    return
+
+                                # 绑定激活码
+                                bind_response = requests.post(
+                                    f"{self.api_base_url}/bind_active_code",
+                                    json={
+                                        "username": username,
+                                        "active_code": active_code
+                                    },
+                                    headers={'Content-Type': 'application/json'},
+                                    timeout=5
+                                )
+                                
+                                print("绑定激活码响应:", bind_response.text)
+                                
+                                if bind_response.status_code != 200:
+                                    QMessageBox.warning(self, "错误", "激活码绑定失败！")
+                                    return
+                            else:
+                                return
+                        
                         QMessageBox.information(self, "成功", "登录成功！")
-                        # 这里可以添加登录成功后的操作
-                    else:
-                        QMessageBox.warning(self, "警告", "登录成功但机器码验证失败！")
+                        self.shopee_tools.show_main_window(username)
+                        
+                    except requests.exceptions.RequestException as e:
+                        QMessageBox.critical(self, "错误", f"验证激活码失败: {str(e)}")
+                        return
                 else:
                     QMessageBox.warning(self, "错误", result.get('message', '登录失败！'))
             else:
@@ -215,3 +375,20 @@ class LoginWindow(QWidget):
                 
         except requests.exceptions.RequestException as e:
             QMessageBox.critical(self, "错误", f"请求错误: {str(e)}")
+
+    def mousePressEvent(self, event):
+        """实现窗口拖动"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.dragging = True
+            self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        """实现窗口拖动"""
+        if event.buttons() == Qt.MouseButton.LeftButton and self.dragging:
+            self.move(event.globalPosition().toPoint() - self.drag_position)
+            event.accept()
+
+    def mouseReleaseEvent(self, event):
+        """实现窗口拖动"""
+        self.dragging = False
