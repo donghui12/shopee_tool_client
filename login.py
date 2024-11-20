@@ -298,83 +298,104 @@ class LoginWindow(QWidget):
             
             print("状态码:", response.status_code)
             print("响应内容:", response.text)
-
+            
             if response.status_code == 200:
-                print(f"result: {response.json()}")
                 result = response.json()
                 
                 # 检查是否需要验证码
                 if result.get('code') == 410 and "need_vcode" in result.get('message', ''):
-                    if self.show_vcode_dialog():  # 显示验证码输入对话框
-                        self.handle_login()  # 重新尝试登录
+                    if self.show_vcode_dialog():
+                        self.handle_login()
                     return
-
-                print(f"result: {result}")
+                
                 if result.get('code') == 200:  # 登录成功
-                    print(f"登录成功: {username}")
                     self.username = username
                     # 验证机器码
                     if not self.verify_machine_code():
                         QMessageBox.warning(self, "警告", "机器码验证失败！")
                         return
+                    
                     # 验证激活码
-                    try:
-                        active_response = requests.get(
-                            f"{self.api_base_url}/active_code",
-                            params={"username": username},
-                            timeout=5
-                        )
-                        
-                        print("激活码验证响应:", active_response.text)
-                        
-                        if active_response.status_code != 200:
-                            # 显示激活码输入对话框
-                            active_dialog = ActiveCodeDialog(self)
-                            if active_dialog.exec() == 1:  # 用户点击确定
-                                active_code = active_dialog.get_active_code()
-                                # 验证激活码
-                                verify_active_code_response = requests.get(
-                                    f"{self.api_base_url}/verify_active_code",
-                                    params={"active_code": active_code},
-                                    timeout=5
-                                )
-
-                                if verify_active_code_response.status_code != 200:
-                                    QMessageBox.warning(self, "错误", "无效激活码！")
-                                    return
-
-                                # 绑定激活码
-                                bind_response = requests.post(
-                                    f"{self.api_base_url}/bind_active_code",
-                                    json={
-                                        "username": username,
-                                        "active_code": active_code
-                                    },
-                                    headers={'Content-Type': 'application/json'},
-                                    timeout=5
-                                )
-                                
-                                print("绑定激活码响应:", bind_response.text)
-                                
-                                if bind_response.status_code != 200:
-                                    QMessageBox.warning(self, "错误", "激活码绑定失败！")
-                                    return
-                            else:
-                                return
-                        
-                        QMessageBox.information(self, "成功", "登录成功！")
-                        self.shopee_tools.show_main_window(username)
-                        
-                    except requests.exceptions.RequestException as e:
-                        QMessageBox.critical(self, "错误", f"验证激活码失败: {str(e)}")
+                    if not self.verify_and_bind_active_code(username):
                         return
+                    
+                    QMessageBox.information(self, "成功", "登录成功！")
+                    self.shopee_tools.show_main_window(username)
                 else:
-                    QMessageBox.warning(self, "错误", result.get('message', '登录失败！'))
+                    error_msg = result.get('message', '登录失败！')
+                    QMessageBox.warning(self, "错误", error_msg)
+                    self.vcode = ""
             else:
                 QMessageBox.warning(self, "错误", f"服务器错误: {response.status_code}")
                 
         except requests.exceptions.RequestException as e:
             QMessageBox.critical(self, "错误", f"请求错误: {str(e)}")
+
+    def verify_and_bind_active_code(self, username):
+        """验证并绑定激活码"""
+        while True:  # 循环直到成功或用户取消
+            try:
+                active_response = requests.get(
+                    f"{self.api_base_url}/active_code",
+                    params={"username": username},
+                    timeout=5
+                )
+                
+                print("激活码验证响应:", active_response.text)
+                
+                if active_response.status_code == 200:
+                    return True  # 激活码验证成功
+                    
+                # 显示激活码输入对话框
+                active_dialog = ActiveCodeDialog(self)
+                if active_dialog.exec() != 1:  # 用户点击取消
+                    return False
+                    
+                active_code = active_dialog.get_active_code()
+                verify_active_code_response = requests.get(
+                        f"{self.api_base_url}/verify_active_code",
+                        params={"active_code": active_code},
+                        timeout=5
+                    )
+
+                if verify_active_code_response.status_code != 200:
+                    QMessageBox.warning(self, "错误", "无效激活码！")
+                    continue
+
+                # 绑定激活码
+                bind_response = requests.post(
+                    f"{self.api_base_url}/bind_active_code",
+                    json={
+                        "username": username,
+                        "active_code": active_code
+                    },
+                    headers={'Content-Type': 'application/json'},
+                    timeout=5
+                )
+                
+                print("绑定激活码响应:", bind_response.text)
+                
+                if bind_response.status_code == 200:
+                    return True
+                else:
+                    QMessageBox.warning(
+                        self, 
+                        "错误", 
+                        f"激活码绑定失败（{bind_response.status_code}），请重新输入！"
+                    )
+                    continue  # 继续循环，重新输入
+                    
+            except requests.exceptions.RequestException as e:
+                QMessageBox.critical(self, "错误", f"验证激活码失败: {str(e)}")
+                retry = QMessageBox.question(
+                    self,
+                    "重试",
+                    "网络错误，是否重试？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                if retry == QMessageBox.StandardButton.Yes:
+                    continue  # 继续循环，重试
+                return False  # 用户选择不重试
 
     def mousePressEvent(self, event):
         """实现窗口拖动"""
