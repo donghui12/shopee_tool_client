@@ -104,19 +104,26 @@ class MainWindow(QMainWindow):
         """)
         
         self.time_input = QLineEdit()
-        self.time_input.setPlaceholderText("请输入出货时间")
+        self.time_input.setPlaceholderText("请输入出货时间（1-365天）")
         self.time_input.setMinimumHeight(40)
+        self.time_input.textChanged.connect(self.validate_input)
         self.time_input.setStyleSheet("""
             QLineEdit {
                 font-size: 16px;
-                padding: 5px 10px;
+                padding: 5px 15px;
                 border: 2px solid #bdc3c7;
                 border-radius: 5px;
-                background-color: #f9f9f9;
+                background-color: white;
+                color: #2c3e50;
+                font-weight: 500;
             }
             QLineEdit:focus {
                 border-color: #3498db;
-                background-color: #ffffff;
+                background-color: #f8f9fa;
+            }
+            QLineEdit::placeholder {
+                color: #95a5a6;
+                font-weight: normal;
             }
         """)
         
@@ -172,26 +179,155 @@ class MainWindow(QMainWindow):
     def update_order(self):
         """更新库存信息"""
         time_value = self.time_input.text().strip()
+        
+        # 验证输入是否为空
         if not time_value:
+            QMessageBox.warning(
+                self,
+                "输入错误",
+                "请输入出货时间！",
+                QMessageBox.StandardButton.Ok
+            )
             self.status_label.setText("请输入出货时间！")
-            self.status_label.setStyleSheet("color: #e74c3c;")  # 红色错误提示
+            self.status_label.setStyleSheet("color: #e74c3c;")
+            return
+        
+        # 验证输入是否为数字
+        try:
+            days = int(time_value)
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                "输入错误",
+                "请输入有效的数字！",
+                QMessageBox.StandardButton.Ok
+            )
+            self.status_label.setText("请输入有效的数字！")
+            self.status_label.setStyleSheet("color: #e74c3c;")
+            return
+        
+        # 验证天数范围
+        if days <= 0 or days > 365:
+            QMessageBox.warning(
+                self,
+                "输入错误",
+                "出货时间必须在 1-365 天之间！",
+                QMessageBox.StandardButton.Ok
+            )
+            self.status_label.setText("出货时间必须在 1-365 天之间！")
+            self.status_label.setStyleSheet("color: #e74c3c;")
             return
             
         try:
             response = requests.post(
-                f"{self.api_base_url}/update-order",
-                json={"username": self.username},
+                f"{self.api_base_url}/update_order",
+                json={
+                    "username": self.username,
+                    "day": days  # 添加天数参数
+                },
                 headers={'Content-Type': 'application/json'},
                 timeout=5
             )
             
             if response.status_code == 200:
-                self.status_label.setText("库存信息更新成功！")
-                self.status_label.setStyleSheet("color: #27ae60;")  # 绿色成功提示
+                result = response.json()
+                if result.get('code') == 200:
+                    QMessageBox.information(
+                        self,
+                        "成功",
+                        "库存信息更新成功！",
+                        QMessageBox.StandardButton.Ok
+                    )
+                    self.status_label.setText("库存信息更新成功！")
+                    self.status_label.setStyleSheet("color: #27ae60;")  # 绿色成功提示
+                else:
+                    error_msg = result.get('message', '更新失败')
+                    QMessageBox.warning(
+                        self,
+                        "错误",
+                        f"更新失败: {error_msg}",
+                        QMessageBox.StandardButton.Ok
+                    )
+                    self.status_label.setText(f"更新失败: {error_msg}")
+                    self.status_label.setStyleSheet("color: #e74c3c;")
             else:
+                QMessageBox.warning(
+                    self,
+                    "错误",
+                    f"服务器错误 ({response.status_code})",
+                    QMessageBox.StandardButton.Ok
+                )
                 self.status_label.setText(f"更新失败: 服务器错误 ({response.status_code})")
                 self.status_label.setStyleSheet("color: #e74c3c;")
                 
         except requests.exceptions.RequestException as e:
+            QMessageBox.critical(
+                self,
+                "错误",
+                f"网络错误: {str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
             self.status_label.setText(f"更新失败: {str(e)}")
             self.status_label.setStyleSheet("color: #e74c3c;")
+
+    def validate_input(self, text):
+        """实时验证输入"""
+        if text:
+            try:
+                days = int(text)
+                if days <= 0 or days > 365:
+                    self.time_input.setStyleSheet("""
+                        QLineEdit {
+                            font-size: 16px;
+                            padding: 5px 15px;
+                            border: 2px solid #e74c3c;
+                            border-radius: 5px;
+                            background-color: white;
+                            color: #2c3e50;
+                            font-weight: 500;
+                        }
+                    """)
+                    self.status_label.setText("出货时间必须在1-365天之间！")
+                    self.status_label.setStyleSheet("color: #e74c3c;")
+                else:
+                    self.time_input.setStyleSheet("""
+                        QLineEdit {
+                            font-size: 16px;
+                            padding: 5px 15px;
+                            border: 2px solid #2ecc71;
+                            border-radius: 5px;
+                            background-color: white;
+                            color: #2c3e50;
+                            font-weight: 500;
+                        }
+                    """)
+                    self.status_label.setText("输入有效")
+                    self.status_label.setStyleSheet("color: #27ae60;")
+            except ValueError:
+                self.time_input.setStyleSheet("""
+                    QLineEdit {
+                        font-size: 16px;
+                        padding: 5px 15px;
+                        border: 2px solid #e74c3c;
+                        border-radius: 5px;
+                        background-color: white;
+                        color: #2c3e50;
+                        font-weight: 500;
+                    }
+                """)
+                self.status_label.setText("请输入有效的数字！")
+                self.status_label.setStyleSheet("color: #e74c3c;")
+        else:
+            # 输入框为空时恢复默认样式
+            self.time_input.setStyleSheet("""
+                QLineEdit {
+                    font-size: 16px;
+                    padding: 5px 15px;
+                    border: 2px solid #bdc3c7;
+                    border-radius: 5px;
+                    background-color: white;
+                    color: #2c3e50;
+                    font-weight: 500;
+                }
+            """)
+            self.status_label.setText("")
