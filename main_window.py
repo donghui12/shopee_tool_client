@@ -1,7 +1,16 @@
-from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
-                           QHBoxLayout, QPushButton, QLabel, QFrame, QLineEdit, QMessageBox)
-from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QIcon, QFont
+from PyQt6.QtWidgets import (
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QFrame,
+    QGroupBox,
+    QMessageBox
+)
+from PyQt6.QtCore import Qt
 import requests
 
 class MainWindow(QMainWindow):
@@ -12,111 +21,162 @@ class MainWindow(QMainWindow):
         self.setup_ui()
         
     def setup_ui(self):
-        # 设置窗口基本属性
-        self.setWindowTitle('ShopeeTools')
-        self.resize(900, 600)
+        """设置UI界面"""
+        self.setWindowTitle("Shopee Tools")
+        self.setFixedSize(800, 600)
         
-        # 创建中央窗口部件
+        # 创建中央部件
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
         # 创建主布局
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(30, 30, 30, 30)
         
-        # 左侧菜单
-        left_menu = self.create_left_menu()
-        
-        # 右侧内容区
-        right_content = self.create_right_content()
-        
-        main_layout.addWidget(left_menu)
-        main_layout.addWidget(right_content, 1)  # 1表示拉伸因子
-        
-    def create_left_menu(self):
-        left_menu = QFrame()
-        left_menu.setFixedWidth(200)
-        left_menu.setStyleSheet("background-color: #2C2C2C;")
-        
-        layout = QVBoxLayout(left_menu)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        
-        # 添加菜单按钮
-        menu_buttons = ['出货时间设置', '其他功能']
-        for text in menu_buttons:
-            btn = QPushButton(text)
-            btn.setFixedHeight(50)
-            btn.setFont(QFont("Arial", 12))
-            btn.setStyleSheet("""
-                QPushButton {
-                    color: white;
-                    border: none;
-                    text-align: left;
-                    padding-left: 20px;
-                }
-                QPushButton:hover { background-color: #3C3C3C; }
-            """)
-            layout.addWidget(btn)
-        
-        layout.addStretch()
-        return left_menu
-        
-    def create_right_content(self):
-        right_content = QFrame()
-        right_content.setStyleSheet("background-color: #F5F5F5;")
-        
-        layout = QVBoxLayout(right_content)
-        layout.setContentsMargins(20, 20, 20, 20)
-        
-        # 标题
-        title = QLabel("出货时间设置")
-        title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
-        
-        # 时间输入框
-        time_layout = QHBoxLayout()
-        time_label = QLabel("出货时间:")
-        self.time_input = QLineEdit()
-        self.time_input.setPlaceholderText("请输入出货时间")
-        self.time_input.setMinimumHeight(35)
-        self.time_input.setStyleSheet("""
-            QLineEdit {
-                border: 1px solid #CCCCCC;
+        # 添加标题
+        title_label = QLabel("Shopee Tools 主控面板")
+        title_label.setStyleSheet("""
+            QLabel {
+                font-size: 24px;
+                font-weight: bold;
+                color: #2c3e50;
+                padding: 10px;
+                background-color: #ecf0f1;
                 border-radius: 5px;
-                padding: 5px 10px;
-                font-size: 14px;
             }
-            QLineEdit:focus { border: 1px solid #4CAF50; }
+        """)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # 添加用户信息
+        user_info = QLabel(f"当前用户: {self.username}")
+        user_info.setStyleSheet("""
+            QLabel {
+                font-size: 16px;
+                color: #7f8c8d;
+                padding: 5px;
+            }
         """)
         
-        update_button = QPushButton("更新")
-        update_button.setFixedWidth(100)
+        # 创建功能区域
+        function_frame = QFrame()
+        function_frame.setStyleSheet("""
+            QFrame {
+                background-color: #ffffff;
+                border: 2px solid #bdc3c7;
+                border-radius: 10px;
+                padding: 20px;
+            }
+        """)
+        function_layout = QVBoxLayout(function_frame)
+        
+        # 添加出货时间设置区域
+        time_group = QGroupBox("出货时间设置")
+        time_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 18px;
+                font-weight: bold;
+                color: #2c3e50;
+                border: 2px solid #3498db;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top center;
+                padding: 0 10px;
+                background-color: #ffffff;
+            }
+        """)
+        
+        time_layout = QVBoxLayout(time_group)
+        
+        # 添加时间输入框
+        time_input_layout = QHBoxLayout()
+        time_label = QLabel("设置时间:")
+        time_label.setStyleSheet("""
+            QLabel {
+                font-size: 16px;
+                color: #34495e;
+                min-width: 80px;
+            }
+        """)
+        
+        self.time_input = QLineEdit()
+        self.time_input.setPlaceholderText("请输入出货时间")
+        self.time_input.setMinimumHeight(40)
+        self.time_input.setStyleSheet("""
+            QLineEdit {
+                font-size: 16px;
+                padding: 5px 10px;
+                border: 2px solid #bdc3c7;
+                border-radius: 5px;
+                background-color: #f9f9f9;
+            }
+            QLineEdit:focus {
+                border-color: #3498db;
+                background-color: #ffffff;
+            }
+        """)
+        
+        time_input_layout.addWidget(time_label)
+        time_input_layout.addWidget(self.time_input)
+        
+        # 添加更新按钮
+        update_button = QPushButton("更新库存信息")
+        update_button.setMinimumHeight(45)
+        update_button.setCursor(Qt.CursorShape.PointingHandCursor)
         update_button.setStyleSheet("""
             QPushButton {
-                background-color: #4CAF50;
+                font-size: 16px;
+                font-weight: bold;
                 color: white;
+                background-color: #2ecc71;
                 border: none;
                 border-radius: 5px;
-                font-size: 14px;
-                min-height: 35px;
+                padding: 10px 20px;
             }
-            QPushButton:hover { background-color: #45a049; }
+            QPushButton:hover {
+                background-color: #27ae60;
+            }
+            QPushButton:pressed {
+                background-color: #219a52;
+            }
         """)
         update_button.clicked.connect(self.update_order)
         
-        time_layout.addWidget(time_label)
-        time_layout.addWidget(self.time_input)
+        # 添加状态显示区域
+        self.status_label = QLabel()
+        self.status_label.setStyleSheet("""
+            QLabel {
+                font-size: 14px;
+                color: #7f8c8d;
+                padding: 5px;
+                min-height: 20px;
+            }
+        """)
+        
+        # 组装时间设置区域
+        time_layout.addLayout(time_input_layout)
         time_layout.addWidget(update_button)
+        time_layout.addWidget(self.status_label)
         
-        layout.addWidget(title)
-        layout.addLayout(time_layout)
-        layout.addStretch()
-        
-        return right_content
+        # 添加所有组件到主布局
+        main_layout.addWidget(title_label)
+        main_layout.addWidget(user_info)
+        main_layout.addWidget(function_frame)
+        function_layout.addWidget(time_group)
+        main_layout.addStretch()
         
     def update_order(self):
-        """更新订单信息"""
+        """更新库存信息"""
+        time_value = self.time_input.text().strip()
+        if not time_value:
+            self.status_label.setText("请输入出货时间！")
+            self.status_label.setStyleSheet("color: #e74c3c;")  # 红色错误提示
+            return
+            
         try:
             response = requests.post(
                 f"{self.api_base_url}/update-order",
@@ -126,9 +186,12 @@ class MainWindow(QMainWindow):
             )
             
             if response.status_code == 200:
-                QMessageBox.information(self, "成功", "库存信息更新成功！")
+                self.status_label.setText("库存信息更新成功！")
+                self.status_label.setStyleSheet("color: #27ae60;")  # 绿色成功提示
             else:
-                QMessageBox.warning(self, "错误", "库存信息更新失败！")
+                self.status_label.setText(f"更新失败: 服务器错误 ({response.status_code})")
+                self.status_label.setStyleSheet("color: #e74c3c;")
                 
         except requests.exceptions.RequestException as e:
-            QMessageBox.critical(self, "错误", f"更新失败: {str(e)}")
+            self.status_label.setText(f"更新失败: {str(e)}")
+            self.status_label.setStyleSheet("color: #e74c3c;")
