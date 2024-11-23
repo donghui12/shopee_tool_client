@@ -8,7 +8,8 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QFrame,
     QGroupBox,
-    QMessageBox
+    QMessageBox,
+    QApplication
 )
 from PyQt6.QtCore import Qt
 import requests
@@ -224,14 +225,14 @@ class MainWindow(QMainWindow):
             return
         
         # 验证天数范围
-        if days <= 0 or days > 365:
+        if days < 7 or days > 30:
             QMessageBox.warning(
                 self,
                 "输入错误",
-                "出货时间必须在 1-365 天之间！",
+                "出货时间必须在 7-30 天之间！",
                 QMessageBox.StandardButton.Ok
             )
-            self.status_label.setText("出货时间必须在 1-365 天之间！")
+            self.status_label.setText("出货时间必须在 7-30 天之间！")
             self.status_label.setStyleSheet("color: #e74c3c;")
             return
         
@@ -253,56 +254,84 @@ class MainWindow(QMainWindow):
             print(f"剩余时间转换错误: {self.remaining_time}")
         
         try:
+            # 更新状态为"正在更新"
+            self.status_label.setText("正在更新库存信息...")
+            self.status_label.setStyleSheet("""
+                QLabel {
+                    color: #f39c12;  /* 橙色表示进行中 */
+                    font-weight: bold;
+                }
+            """)
+            # 刷新界面
+            QApplication.processEvents()
+            
+            # 设置超时时间为 300 秒
             response = requests.post(
                 f"{self.api_base_url}/update_order",
                 json={
                     "username": self.username,
-                    "day": days  # 添加天数参数
+                    "days": days
                 },
                 headers={'Content-Type': 'application/json'},
-                timeout=5
+                timeout=300  # 300秒超时p
             )
             
             if response.status_code == 200:
                 result = response.json()
                 if result.get('code') == 200:
-                    QMessageBox.information(
-                        self,
-                        "成功",
-                        "库存信息更新成功！",
-                        QMessageBox.StandardButton.Ok
-                    )
                     self.status_label.setText("库存信息更新成功！")
-                    self.status_label.setStyleSheet("color: #27ae60;")  # 绿色成功提示
+                    self.status_label.setStyleSheet("""
+                        QLabel {
+                            color: #27ae60;  /* 绿色表示成功 */
+                            font-weight: bold;
+                        }
+                    """)
                 else:
                     error_msg = result.get('message', '更新失败')
-                    QMessageBox.warning(
-                        self,
-                        "错误",
-                        f"更新失败: {error_msg}",
-                        QMessageBox.StandardButton.Ok
-                    )
                     self.status_label.setText(f"更新失败: {error_msg}")
-                    self.status_label.setStyleSheet("color: #e74c3c;")
+                    self.status_label.setStyleSheet("""
+                        QLabel {
+                            color: #e74c3c;  /* 红色表示错误 */
+                            font-weight: bold;
+                        }
+                    """)
             else:
-                QMessageBox.warning(
-                    self,
-                    "错误",
-                    f"服务器错误 ({response.status_code})",
-                    QMessageBox.StandardButton.Ok
-                )
                 self.status_label.setText(f"更新失败: 服务器错误 ({response.status_code})")
-                self.status_label.setStyleSheet("color: #e74c3c;")
+                self.status_label.setStyleSheet("""
+                    QLabel {
+                        color: #e74c3c;
+                        font-weight: bold;
+                    }
+                """)
                 
+        except requests.exceptions.Timeout:
+            self.status_label.setText("更新超时，请稍后重试！")
+            self.status_label.setStyleSheet("""
+                QLabel {
+                    color: #e74c3c;
+                    font-weight: bold;
+                }
+            """)
+            QMessageBox.warning(
+                self,
+                "超时错误",
+                "更新操作超时，请稍后重试！",
+                QMessageBox.StandardButton.Ok
+            )
         except requests.exceptions.RequestException as e:
+            self.status_label.setText(f"更新失败: {str(e)}")
+            self.status_label.setStyleSheet("""
+                QLabel {
+                    color: #e74c3c;
+                    font-weight: bold;
+                }
+            """)
             QMessageBox.critical(
                 self,
                 "错误",
                 f"网络错误: {str(e)}",
                 QMessageBox.StandardButton.Ok
             )
-            self.status_label.setText(f"更新失败: {str(e)}")
-            self.status_label.setStyleSheet("color: #e74c3c;")
 
     def validate_input(self, text):
         """实时验证输入"""
